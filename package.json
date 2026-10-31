@@ -1,0 +1,29 @@
+{
+  "name": "devfix",
+  "version": "1.0.0",
+  "description": "Automated Import and Dependency Repair CLI",
+  "type": "module",
+  "main": "src/cli.js",
+  "bin": {
+    "devfix": "./src/cli.js"
+  },
+  "scripts": {
+    "start": "node src/cli.js"
+  },
+  "keywords": [
+    "cli",
+    "developer-tools",
+    "dependencies",
+    "imports",
+    "javascript"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@babel/parser": "^7.29.8",
+    "@babel/traverse": "^7.29.8",
+    "commander": "^15.0.0",
+    "diff": "^9.0.0",
+    "react": "^19.3.1"
+  }
+}
