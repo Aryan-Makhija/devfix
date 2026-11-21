@@ -4,8 +4,7 @@ import { readFile } from "node:fs/promises";
 
 export async function readPackageJson(packageJsonPath) {
 
-    const content = await readFile(packageJsonPath, "utf-8");
-
+    const content = await readFile(packageJsonPath, "utf-8")
     return JSON.parse(content);
 
 }
