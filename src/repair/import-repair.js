@@ -20,7 +20,8 @@ import {
 export async function repairMissingImports(
     fileResults,
     projectRoot,
-    transactionContext
+    transactionContext,
+    availablePackages = []
 ) {
     const summary = {
         scannedFiles: 0,
@@ -59,7 +60,8 @@ export async function repairMissingImports(
         const resolutions = resolveCandidates(
             importCandidates,
             imports,
-            projectRoot
+            projectRoot,
+            availablePackages
         );
 
         for (const resolution of resolutions) {

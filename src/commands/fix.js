@@ -195,10 +195,15 @@ async function fixCommands(target) {
             transactionId: null
         };
 
+        // Extract package names from declared dependencies.
+        const availablePackages = Object.keys(dependencies);
+
+
         const importRepairResult = await repairMissingImports(
             fileResults,
             projectRoot,
-            transactionContext
+            transactionContext,
+            availablePackages
         );
         console.log("\nDevFix repair summary:");
 
