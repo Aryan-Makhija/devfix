@@ -187,11 +187,19 @@ async function fixCommands(target) {
         // Import repair
         // ===================================
 
+        // const importRepairResult = await repairMissingImports(
+        //     fileResults,
+        //     projectRoot
+        // );
+        const transactionContext = {
+            transactionId: null
+        };
+
         const importRepairResult = await repairMissingImports(
             fileResults,
-            projectRoot
+            projectRoot,
+            transactionContext
         );
-
         console.log("\nDevFix repair summary:");
 
         console.log({

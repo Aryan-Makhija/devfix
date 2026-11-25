@@ -12,9 +12,15 @@ import {
     executeImportRepairs
 } from "./repair-workflow.js";
 
+import {
+    getTransaction,
+    updateTransactionStatus
+} from "../undo/transaction-manager.js";
+
 export async function repairMissingImports(
     fileResults,
-    projectRoot
+    projectRoot,
+    transactionContext
 ) {
     const summary = {
         scannedFiles: 0,
@@ -115,7 +121,9 @@ export async function repairMissingImports(
             const result = await executeImportRepairs(
                 filePath,
                 originalCode,
-                plan.repairs
+                plan.repairs,
+                projectRoot,
+                transactionContext
             );
 
             if (result.success) {
@@ -134,6 +142,23 @@ export async function repairMissingImports(
 
             console.error(
                 `Import repair failed: ${error.message}`
+            );
+        }
+    }
+
+
+    // Finalize transaction if at least one backup was created.
+    if (transactionContext.transactionId) {
+        const transaction = await getTransaction(
+            projectRoot,
+            transactionContext.transactionId
+        );
+
+        if (transaction.files.length > 0) {
+            await updateTransactionStatus(
+                projectRoot,
+                transactionContext.transactionId,
+                "completed"
             );
         }
     }

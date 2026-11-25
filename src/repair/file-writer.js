@@ -2,6 +2,12 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
 
+import { createTransaction } from "../undo/transaction-manager.js";
+
+import {
+    createFileBackup
+} from "../undo/backup-manager.js";
+
 import { parseSourceCode } from "../analyzer/parser.js";
 
 const ALLOWED_EXTENSIONS = new Set([
@@ -15,7 +21,9 @@ export async function writeRepairedFile({
     filePath,
     originalCode,
     modifiedCode,
-    approved
+    approved,
+    projectRoot,
+    transactionContext
 }) {
     // 1. Require explicit approval
     if (approved !== true) {
@@ -106,6 +114,32 @@ export async function writeRepairedFile({
             );
         }
 
+        // Recheck immediately before creating the backup.
+        const latestCode = await fs.readFile(filePath, "utf8");
+
+        if (latestCode !== originalCode) {
+            throw new Error("file_changed_before_write");
+        }
+        // Create one transaction for this entire fix execution.
+        if (!transactionContext.transactionId) {
+            const transaction = await createTransaction(projectRoot);
+
+            transactionContext.transactionId = transaction.id;
+        }
+
+        // Back up the original file before replacing it.
+        try {
+            await createFileBackup(
+                projectRoot,
+                transactionContext.transactionId,
+                filePath,
+                originalCode,
+                modifiedCode
+            );
+        } catch (error) {
+            throw new Error(`Unable to create file backup: ${error.message}`);
+        }
+
         // 10. Replace original file
         await fs.rename(
             temporaryPath,
@@ -144,7 +178,7 @@ export async function writeRepairedFile({
         if (temporaryPath) {
             await fs.rm(temporaryPath, {
                 force: true
-            }).catch(() => {});
+            }).catch(() => { });
         }
     }
 }

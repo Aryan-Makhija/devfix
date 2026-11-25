@@ -5,6 +5,7 @@ import { Command } from "commander";
 
 import fixCommand from "./commands/fix.js";
 import checkCommand from "./commands/check.js";
+import undoCommand from "./commands/undo.js";
 
 
 
@@ -26,6 +27,12 @@ program
     .command("check")
     .description("Analyze the project wihtout modifying files")
     .action(checkCommand)
+
+program
+    .command("undo")
+    .description("Undo the latest completed DevFix repair transaction")
+    .action(undoCommand);
+
 
 
 program.parse();    

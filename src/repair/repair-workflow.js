@@ -12,7 +12,9 @@ import {
 export async function prepareImportRepairs(
     filePath,
     originalCode,
-    repairs
+    repairs,
+    projectRoot,
+    transactionContext
 ) {
     // Step 1: Generate modified code in memory
     const repairResult = applyImportRepairs(
@@ -64,10 +66,58 @@ export async function prepareImportRepairs(
 }
 
 
+// export async function executeImportRepairs(
+//     filePath,
+//     originalCode,
+//     repairs
+// ) {
+//     // 1. Generate preview and ask confirmation
+//     const preparation = await prepareImportRepairs(
+//         filePath,
+//         originalCode,
+//         repairs
+//     );
+
+//     // 2. Do not write without approval
+//     if (!preparation.approved) {
+//         return {
+//             success: false,
+//             reason: preparation.changed
+//                 ? "user_rejected"
+//                 : "no_changes"
+//         };
+//     }
+
+//     // 3. Write approved changes
+//     const writeResult = await writeRepairedFile({
+//         filePath,
+//         originalCode: preparation.originalCode,
+//         modifiedCode: preparation.modifiedCode,
+//         approved: preparation.approved,
+//         projectRoot,
+//         transactionContext
+//     });
+
+//     if (writeResult.success) {
+//         console.log(
+//             `\nSuccessfully repaired: ${filePath}`
+//         );
+//     } else {
+//         console.log(
+//             `\nFailed to repair ${filePath}: ${writeResult.reason}`
+//         );
+//     }
+
+//     return writeResult;
+// }
+
+
 export async function executeImportRepairs(
     filePath,
     originalCode,
-    repairs
+    repairs,
+    projectRoot,
+    transactionContext
 ) {
     // 1. Generate preview and ask confirmation
     const preparation = await prepareImportRepairs(
@@ -91,7 +141,9 @@ export async function executeImportRepairs(
         filePath,
         originalCode: preparation.originalCode,
         modifiedCode: preparation.modifiedCode,
-        approved: preparation.approved
+        approved: preparation.approved,
+        projectRoot,
+        transactionContext
     });
 
     if (writeResult.success) {
