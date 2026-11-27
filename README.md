@@ -1,7 +1,7 @@
 # DevFix – Automated Import & Dependency Repair CLI
 
 <p align="center">
-  **Detect. Resolve. Repair. Validate.**
+  **Detect. Resolve. Repair. Validate. Undo.**
 </p>
 
 <p align="center">
@@ -27,11 +27,13 @@ DevFix is a Node.js-based command-line tool that analyzes a project, identifies 
 
 Instead of simply displaying errors, DevFix attempts to repair them through a structured workflow involving source-code analysis, candidate resolution, repair planning, preview, developer confirmation, and validation.
 
+The tool also maintains repair transactions and backups, allowing developers to undo supported source-code modifications and restore files to their original state.
+
 The primary goal is to reduce repetitive debugging while keeping developers in control of every modification.
 
 ### Core philosophy
 
-**Detect locally → Resolve intelligently → Repair deterministically → Validate**
+**Detect locally → Resolve intelligently → Repair deterministically → Validate → Rollback when needed**
 
 ---
 
@@ -90,6 +92,7 @@ Rather than requiring developers to manually investigate every issue, DevFix att
 - Preview proposed modifications.
 - Apply approved changes.
 - Validate the resulting source code.
+- Preserve original source files for rollback.
 
 ---
 
@@ -136,7 +139,7 @@ useState
 
 A possible resolution is:
 
-```javascript
+```text
 react → useState
 ```
 
@@ -149,6 +152,8 @@ The resolver classifies candidates into three categories:
 | Unresolved | No suitable candidate was identified |
 
 Ambiguous and unresolved cases are not automatically repaired.
+
+The resolver searches existing import sources and declared dependencies, allowing it to identify exports even when the source file does not already import the relevant package.
 
 ### 4. Automated Import Generation
 
@@ -223,20 +228,75 @@ The confirmation prompt defaults to **No**, preventing accidental execution.
 
 The repair workflow includes safeguards such as checking whether a source file has changed since preview and validating the modified source code.
 
-### 10. Transaction-Based Undo (In Progress)
+Before applying source-code modifications, DevFix creates backups of the original files so that supported changes can be reversed later.
 
-A rollback mechanism is being developed to reverse previous DevFix source-code modifications.
+### 10. Transaction-Based Undo
 
-The planned functionality includes:
+DevFix now includes a transaction-based undo mechanism that allows developers to reverse completed source-code repair operations.
 
-- Creating a transaction for each repair execution.
-- Backing up original source files.
+Every repair execution is associated with a unique transaction.
+
+The transaction system maintains information about the repair operation, its status, and the original and repaired versions of modified files.
+
+**Implemented functionality includes:**
+
+- Creating a unique transaction ID for repair operations.
+- Maintaining transaction history.
+- Creating backups of original source files.
 - Recording original and repaired SHA-256 hashes.
 - Maintaining transaction manifests.
-- Checking whether files have changed after repair.
-- Restoring verified backups.
+- Tracking transaction states.
+- Validating transaction information before rollback.
+- Checking whether files have been modified after the repair.
+- Validating file paths and symlinks before restoration.
+- Restoring original file contents from verified backups.
+- Preventing duplicate undo operations.
+- Updating transaction status after successful restoration.
 
-The initial undo implementation will focus on source-code modifications, not npm dependency installation rollback.
+#### Transaction Lifecycle
+
+DevFix maintains transaction states to track the lifecycle of a repair operation.
+
+| Status | Description |
+|---|---|
+| `pending` | Transaction has been created but is not yet completed |
+| `completed` | Repair execution has completed successfully |
+| `undone` | Original source files have been restored |
+| `failed` | Transaction execution failed |
+
+#### Transaction Storage
+
+Each transaction is stored separately using a unique identifier.
+
+Conceptually, the history structure looks like:
+
+```text
+.devfix/
+└── history/
+    └── <transaction-id>/
+        ├── manifest.json
+        └── backups/
+            ├── src/
+            │   └── App.jsx
+            └── src/
+                └── utils.js
+```
+
+The transaction manifest stores the metadata required to identify the transaction and restore the original files.
+
+Each modified file is associated with its original and repaired SHA-256 hashes.
+
+#### Safe Undo Mechanism
+
+Before restoring a file, DevFix validates the transaction and verifies that the current file is in the expected repaired state.
+
+This prevents undo from blindly overwriting subsequent developer modifications.
+
+The undo workflow also validates backup availability, transaction status, and file paths before restoration.
+
+Temporary restoration files are used during the undo process to support safer file replacement.
+
+**Current scope:** Undo restores supported source-code modifications. npm dependency installation and changes to `package.json` or `package-lock.json` are not yet fully reversed by the undo mechanism.
 
 ---
 
@@ -244,7 +304,7 @@ The initial undo implementation will focus on source-code modifications, not npm
 
 DevFix follows a modular, pipeline-based architecture.
 
-### High-Level Workflow
+### High-Level Repair Workflow
 
 ```mermaid
 flowchart TD
@@ -260,8 +320,30 @@ flowchart TD
     I --> J
     J --> K["Repair Preview"]
     K --> L["Developer Approval"]
-    L --> M["Repair Executor"]
-    M --> N["Post-Repair Validation"]
+    L --> M["Transaction & Backup"]
+    M --> N["Repair Executor"]
+    N --> O["Post-Repair Validation"]
+    O --> P["Transaction History"]
+```
+
+### High-Level Undo Workflow
+
+```mermaid
+flowchart TD
+    A["Developer"] --> B["devfix undo"]
+    B --> C["Transaction Manager"]
+    C --> D["Retrieve Transaction History"]
+    D --> E["Identify Transaction"]
+    E --> F["Undo Validator"]
+    F --> G{"Transaction Valid?"}
+    G -- No --> H["Report Validation Error"]
+    G -- Yes --> I["Undo Executor"]
+    I --> J["Load Backup Information"]
+    J --> K["Validate File Integrity"]
+    K --> L["Restore Original Files"]
+    L --> M["Update Transaction Status"]
+    M --> N["Mark Transaction as Undone"]
+    N --> O["Undo Summary"]
 ```
 
 ### Step 1 – Project Scanning
@@ -300,13 +382,33 @@ DevFix generates a diff preview and displays the proposed modifications.
 
 The developer decides whether to proceed.
 
-### Step 7 – Repair Execution
+### Step 7 – Transaction and Backup Creation
+
+Before supported source-code modifications are executed, DevFix creates a transaction and stores the original file contents.
+
+The transaction manager maintains the information required for future rollback.
+
+### Step 8 – Repair Execution
 
 Approved dependency installations and source-code modifications are executed.
 
-### Step 8 – Validation
+The transaction system records the execution result and updates the transaction status.
+
+### Step 9 – Validation
 
 DevFix validates the resulting source code and verifies dependency installation results.
+
+### Step 10 – Undo and Recovery
+
+When a developer wants to reverse a completed repair, they can execute:
+
+```bash
+devfix undo
+```
+
+DevFix retrieves transaction history, validates the selected transaction, verifies backup information, and restores the original source files.
+
+After successful restoration, the transaction is marked as `undone`.
 
 ---
 
@@ -353,7 +455,63 @@ function App() {
 }
 ```
 
-The modified source is then validated.
+The modified source is then validated and its original contents are preserved in the transaction backup.
+
+---
+
+## Example: Transaction-Based Undo
+
+Suppose DevFix has successfully repaired a missing import in `App.jsx`.
+
+**Before repair**
+
+```javascript
+function App() {
+    const [count, setCount] = useState(0);
+
+    return <div>{count}</div>;
+}
+```
+
+**After DevFix repair**
+
+```javascript
+import { useState } from "react";
+
+function App() {
+    const [count, setCount] = useState(0);
+
+    return <div>{count}</div>;
+}
+```
+
+DevFix stores the original contents and records the transaction information.
+
+The developer can then execute:
+
+```bash
+devfix undo
+```
+
+The undo workflow:
+
+1. Retrieves the previous transaction.
+2. Checks whether the transaction is eligible for undo.
+3. Validates the backup and file integrity.
+4. Restores the original file contents.
+5. Updates the transaction status to `undone`.
+
+**After undo**
+
+```javascript
+function App() {
+    const [count, setCount] = useState(0);
+
+    return <div>{count}</div>;
+}
+```
+
+The source file is restored to its original state.
 
 ---
 
@@ -410,6 +568,30 @@ Shows the final repair execution and validation output.
 ![DevFix Successful Repair](docs/screenshots/successful-repair.png)
 
 *Figure 6: Successful automated repair.*
+
+### 7. Transaction Creation and Backup
+
+Shows DevFix creating a transaction and backing up original source files before modification.
+
+![DevFix Transaction Backup](docs/screenshots/transaction-backup.png)
+
+*Figure 7: Transaction creation and original file backup.*
+
+### 8. Undo Execution
+
+Shows the undo command validating a transaction and restoring the original source files.
+
+![DevFix Undo Execution](docs/screenshots/undo-execution.png)
+
+*Figure 8: Transaction-based source-code rollback.*
+
+### 9. Successful Undo
+
+Shows the final undo result and updated transaction status.
+
+![DevFix Successful Undo](docs/screenshots/successful-undo.png)
+
+*Figure 9: Successful restoration of original source files.*
 
 ---
 
@@ -473,25 +655,31 @@ src/
 │   ├── repair-confirmation.js
 │   └── file-writer.js
 │
-├── undo/
+├── transaction/
 │   ├── transaction-manager.js
-│   └── backup-manager.js
+│   ├── backup-manager.js
+│   ├── undo-validator.js
+│   └── undo-executor.js
 │
 ├── commands/
-│   └── fix.js
+│   ├── fix.js
+│   ├── check.js
+│   └── undo.js
 │
 └── cli.js
 ```
 
-*Note: The directory structure above represents the major modules. Some utility and supporting files have been omitted for readability. The undo module is still under development.*
+*Note: The directory structure above represents the major modules. Some utility and supporting files have been omitted for readability.*
 
 ### Architectural Design Principles
 
-**Separation of concerns:** Scanning, analysis, dependency management, resolution, planning, and execution are separated into independent modules.
+**Separation of concerns:** Scanning, analysis, dependency management, resolution, planning, execution, and rollback are separated into independent modules.
 
 **Deterministic processing:** The primary repair pipeline uses explicit rules and package metadata rather than requiring an AI model for routine operations.
 
 **Developer control:** Proposed changes are presented before execution.
+
+**Transaction safety:** Original file contents are preserved and verified before supported rollback operations.
 
 **Extensibility:** New analyzers, resolution strategies, and repair operations can be introduced without redesigning the complete application.
 
@@ -547,6 +735,10 @@ devfix check
 devfix fix
 ```
 
+```bash
+devfix undo
+```
+
 ---
 
 ## CLI Commands
@@ -555,9 +747,15 @@ devfix fix
 |---|---|
 | `devfix check` | Analyze the project and report detected dependency and import issues. |
 | `devfix fix` | Run the repair workflow, display proposed changes, and execute approved repairs. |
-| `devfix undo` | Planned command for reversing the latest eligible repair transaction. |
+| `devfix undo` | Validate a previous repair transaction and restore the original source files. |
 
-*The undo command is not yet available in the current implementation.*
+### Undo Safety
+
+The undo command does not blindly restore every backup.
+
+Before restoring files, DevFix checks transaction validity, backup availability, and file integrity.
+
+If a file has changed unexpectedly after the repair, restoration is prevented rather than silently overwriting the developer's newer changes.
 
 ---
 
@@ -576,7 +774,9 @@ DevFix is being developed incrementally, with each major component implemented a
 | 7 | Repair planning, safety checks, and validation |
 | 8 | Unified diff previews and developer confirmation |
 | 9 | End-to-end dependency and import repair integration |
-| 10 | Transaction manager and backup system for undo (in progress) |
+| 10 | Transaction manager and backup system |
+| 11 | Undo validator and rollback executor |
+| 12 | CLI integration and end-to-end undo testing |
 
 ---
 
@@ -592,8 +792,9 @@ Some limitations are important to understand:
 - Package export discovery does not yet fully model every target project's module-resolution environment.
 - Complex package structures may require additional resolution strategies.
 - Successful syntax validation does not guarantee complete runtime correctness.
-- Undo and transaction recovery are still under development.
-- npm installation rollback is outside the initial undo scope.
+- Undo currently restores supported source-code modifications.
+- Dependency installations and changes to `package.json` or `package-lock.json` are not yet fully reversed by the undo mechanism.
+- Transaction backups and history are intended for supported source-file rollback, not complete environment snapshots.
 
 These limitations define the current V1 scope and guide future development.
 
@@ -618,8 +819,16 @@ These limitations define the current V1 scope and guide future development.
 - [x] Developer confirmation.
 - [x] Controlled file writing.
 - [x] End-to-end repair workflow.
-- [ ] Transaction-based undo.
-- [ ] Comprehensive undo and recovery tests.
+- [x] Transaction-based backup system.
+- [x] Transaction history and manifests.
+- [x] Original and repaired SHA-256 hash tracking.
+- [x] Undo validation.
+- [x] Safe source-file restoration.
+- [x] Transaction status management.
+- [x] Undo CLI integration.
+- [x] End-to-end undo testing.
+- [ ] Dependency installation rollback.
+- [ ] Complete package manifest and lockfile rollback.
 - [ ] Public V1 release.
 
 ### V2 – AI-Assisted Resolution
@@ -692,6 +901,7 @@ Potential areas for contribution include:
 - Adding test cases for complex import structures.
 - Improving repair safety and recovery.
 - Supporting additional project configurations.
+- Extending transaction recovery to dependency installations.
 
 ---
 
@@ -701,8 +911,8 @@ Potential areas for contribution include:
 
 Full-Stack Developer | Node.js | Backend Engineering | AI & RAG Systems
 
-- GitHub: [Your GitHub Profile](<https://github.com/Aryan-Makhija>)
-- LinkedIn: [Your LinkedIn Profile](<https://www.linkedin.com/in/aryan-makhija-1a43a6352>)
+- GitHub: [GitHub](<YOUR_GITHUB_PROFILE_URL>)
+- LinkedIn: [LinkedIn](<YOUR_LINKEDIN_PROFILE_URL>)
 
 ---
 
